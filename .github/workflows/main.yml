@@ -1,1 +1,42 @@
+name: Signal Bot Saham IDX
 
+on:
+  # Jadwal otomatis — jam aktif bursa IDX (WIB = UTC+7)
+  # Bot run 3x per hari pada hari bursa (Senin-Jumat):
+  #   08:55 WIB = 01:55 UTC → sebelum open bursa
+  #   12:00 WIB = 05:00 UTC → tengah sesi
+  #   15:45 WIB = 08:45 UTC → menjelang close
+  schedule:
+    - cron: "55 1 * * 1-5"   # 08:55 WIB — pre-market
+    - cron: "0 5 * * 1-5"    # 12:00 WIB — mid-session
+    - cron: "45 8 * * 1-5"   # 15:45 WIB — pre-close
+
+  # Jalankan manual dari tab Actions di GitHub
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run signal bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:        ${{ secrets.CHAT_ID }}
+          SUPABASE_URL:   ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:   ${{ secrets.SUPABASE_KEY }}
+        run: python bot_saham_v1.py
+        
