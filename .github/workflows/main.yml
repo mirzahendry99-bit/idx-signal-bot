@@ -1,24 +1,13 @@
 name: Signal Bot Saham IDX v7.0
 
 on:
-  # â”€â”€ Jadwal otomatis (waktu UTC â€” IDX market jam 09:00â€“16:15 WIB = 02:00â€“09:15 UTC) â”€â”€
   schedule:
-    # Scan 1: Pre-market (08:50 WIB) â€” deteksi setup sebelum market buka
-    - cron: '50 1 * * 1-5'
+    - cron: '50 1 * * 1-5'   # 08:50 WIB — Pre-market
+    - cron: '30 2 * * 1-5'   # 09:30 WIB — Opening momentum
+    - cron: '0 4 * * 1-5'    # 11:00 WIB — Mid-morning
+    - cron: '30 6 * * 1-5'   # 13:30 WIB — Post-lunch
+    - cron: '30 8 * * 1-5'   # 15:30 WIB — Closing approach
 
-    # Scan 2: Opening momentum (09:30 WIB) â€” setelah market buka 30 menit
-    - cron: '30 2 * * 1-5'
-
-    # Scan 3: Mid-morning (11:00 WIB) â€” sebelum jeda siang
-    - cron: '0 4 * * 1-5'
-
-    # Scan 4: Post-lunch (13:30 WIB) â€” setelah market buka kembali
-    - cron: '30 6 * * 1-5'
-
-    # Scan 5: Closing approach (15:30 WIB) â€” 45 menit sebelum tutup
-    - cron: '30 8 * * 1-5'
-
-  # â”€â”€ Manual trigger (untuk test atau run darurat) â”€â”€
   workflow_dispatch:
     inputs:
       reason:
@@ -30,43 +19,36 @@ jobs:
   run-signal-bot:
     name: Run Signal Bot Saham IDX
     runs-on: ubuntu-latest
-    timeout-minutes: 20   # Safety â€” 1 run max 20 menit (normal ~5-8 menit)
+    timeout-minutes: 20
 
     steps:
-      # â”€â”€ Step 1: Checkout repo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # â”€â”€ Step 2: Setup Python â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'           # Cache pip packages antar run (lebih cepat)
+          cache: 'pip'
 
-      # â”€â”€ Step 3: Install dependencies â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # â”€â”€ Step 4: Run bot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       - name: Run Signal Bot
         env:
-          SUPABASE_URL:     ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY:     ${{ secrets.SUPABASE_KEY }}
-          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID:          ${{ secrets.CHAT_ID }}
-          PORTFOLIO_IDR:    ${{ secrets.PORTFOLIO_IDR }}
-          RISK_PCT:         ${{ secrets.RISK_PCT }}
+          SUPABASE_URL:    ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:    ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_TOKEN:  ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:         ${{ secrets.CHAT_ID }}
+          PORTFOLIO_IDR:   ${{ secrets.PORTFOLIO_IDR }}
+          RISK_PCT:        ${{ secrets.RISK_PCT }}
         run: |
-          echo "â–¶ï¸  Starting Signal Bot Saham IDX v7.0"
-          echo "â°  Time (UTC): $(date -u)"
-          echo "â°  Time (WIB): $(TZ='Asia/Jakarta' date)"
+          echo "▶️  Starting Signal Bot Saham IDX v7.0"
+          echo "⏰  WIB: $(TZ='Asia/Jakarta' date)"
           python bot_saham_v7.py
 
-      # â”€â”€ Step 5: Tampilkan status run â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       - name: Run complete
         if: always()
-        run: |
-          echo "âœ… Bot run selesai â€” cek Telegram untuk signal & health check."
+        run: echo "✅ Selesai — cek Telegram."
