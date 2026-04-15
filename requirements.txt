@@ -1,0 +1,14 @@
+# ════════════════════════════════════════════════════════
+#  requirements.txt — Signal Bot Saham IDX v7.0
+#  Digunakan oleh GitHub Actions saat install dependencies
+# ════════════════════════════════════════════════════════
+
+# Data source — harga saham IDX (delay ~15 menit, gratis)
+yfinance>=0.2.40
+
+# Numerical computing
+numpy>=1.26.0
+pandas>=2.1.0
+
+# Supabase — storage + dedup + win rate tracking
+supabase>=2.3.0
