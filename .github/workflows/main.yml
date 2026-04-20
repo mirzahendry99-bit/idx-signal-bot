@@ -45,9 +45,9 @@ jobs:
           PORTFOLIO_IDR:   ${{ secrets.PORTFOLIO_IDR }}
           RISK_PCT:        ${{ secrets.RISK_PCT }}
         run: |
-          echo "▶️  Starting Signal Bot Saham IDX v7.0"
+          echo "▶️  Starting Signal Bot Saham IDX v7_12"
           echo "⏰  WIB: $(TZ='Asia/Jakarta' date)"
-          python bot_saham_v7.py
+          python bot_saham_v7_12.py
 
       - name: Run complete
         if: always()
