@@ -1,1 +1,136 @@
+name: Signal Bot Saham IDX v8_12
 
+on:
+  schedule:
+    - cron: '50 1 * * 1-5'   # 08:50 WIB — Pre-market
+    - cron: '30 2 * * 1-5'   # 09:30 WIB — Opening momentum
+    - cron: '0 4 * * 1-5'    # 11:00 WIB — Mid-morning
+    - cron: '30 6 * * 1-5'   # 13:30 WIB — Post-lunch
+    - cron: '30 8 * * 1-5'   # 15:30 WIB — Closing approach
+    - cron: '0 13 * * 1-5'   # 20:00 WIB — Model evolution (job terpisah)
+
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Mode run'
+        required: false
+        default: 'normal'
+        type: choice
+        options:
+          - normal
+          - evolution
+          - backtest
+          - unit-test
+          - kill-switch-test
+          - strategy-perf
+
+# ─────────────────────────────────────────────────────────────
+#  JOB 1 — Main Signal Scan (5x sehari, jam bursa)
+# ─────────────────────────────────────────────────────────────
+jobs:
+  run-signal-bot:
+    name: Signal Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Jangan jalankan job ini saat trigger cron 20:00 WIB (itu punya job sendiri)
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode != 'evolution' ||
+      (github.event_name == 'schedule' && github.event.schedule != '0 13 * * 1-5')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Signal Bot
+        env:
+          # ── Required ──────────────────────────────────────────
+          SUPABASE_URL:    ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:    ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_TOKEN:  ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:         ${{ secrets.CHAT_ID }}
+          PORTFOLIO_IDR:   ${{ secrets.PORTFOLIO_IDR }}
+          RISK_PCT:        ${{ secrets.RISK_PCT }}
+          # ── Trading behavior (opsional, ada default) ──────────
+          LEAN_MODE:                     ${{ secrets.LEAN_MODE }}
+          SIMPLE_MODE:                   ${{ secrets.SIMPLE_MODE }}
+          INTRADAY_ENABLED:              ${{ secrets.INTRADAY_ENABLED }}
+          MAX_TRADES_PER_DAY:            ${{ secrets.MAX_TRADES_PER_DAY }}
+          MAX_DAILY_DRAWDOWN_PCT:        ${{ secrets.MAX_DAILY_DRAWDOWN_PCT }}
+          MAX_TOTAL_CAPITAL_DEPLOYED_PCT: ${{ secrets.MAX_TOTAL_CAPITAL_DEPLOYED_PCT }}
+          # ── Data source fallback (opsional) ───────────────────
+          TWELVE_DATA_API_KEY:    ${{ secrets.TWELVE_DATA_API_KEY }}
+          ALPHA_VANTAGE_API_KEY:  ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+        run: |
+          echo "▶️  Signal Bot Saham IDX v8_12"
+          echo "⏰  WIB: $(TZ='Asia/Jakarta' date)"
+
+          # Pilih mode berdasarkan input (workflow_dispatch) atau default ke normal
+          MODE="${{ github.event.inputs.mode }}"
+          case "$MODE" in
+            backtest)       python bot_saham_v8_12.py --backtest ;;
+            unit-test)      python bot_saham_v8_12.py --unit-test ;;
+            kill-switch-test) python bot_saham_v8_12.py --kill-switch-test ;;
+            strategy-perf)  python bot_saham_v8_12.py --strategy-perf ;;
+            *)              python bot_saham_v8_12.py ;;
+          esac
+
+      - name: Run complete
+        if: always()
+        run: echo "✅ Selesai — cek Telegram."
+
+# ─────────────────────────────────────────────────────────────
+#  JOB 2 — Model Evolution (sekali sehari, 20:00 WIB)
+# ─────────────────────────────────────────────────────────────
+  run-model-evolution:
+    name: Model Evolution (20:00 WIB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Hanya jalan saat cron 20:00 WIB atau manual trigger mode=evolution
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 13 * * 1-5') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'evolution')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Model Evolution
+        env:
+          SUPABASE_URL:   ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:   ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:        ${{ secrets.CHAT_ID }}
+          PORTFOLIO_IDR:  ${{ secrets.PORTFOLIO_IDR }}
+          RISK_PCT:       ${{ secrets.RISK_PCT }}
+        run: |
+          echo "🧬 Model Evolution Cycle"
+          echo "⏰  WIB: $(TZ='Asia/Jakarta' date)"
+          python bot_saham_v8_12.py --evolution
+
+      - name: Evolution complete
+        if: always()
+        run: echo "✅ Evolution selesai — cek Telegram."
