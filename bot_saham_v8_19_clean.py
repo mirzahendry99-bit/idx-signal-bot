@@ -11216,7 +11216,8 @@ def run():
                 "warn"
             )
         # Pastikan cluster_weights dikosongkan
-        global _cluster_weights
+        # [v8.19 FIX] global _cluster_weights sudah dideklarasikan di awal run() baris ~11091
+        # Tidak perlu deklarasi ulang — Python 3.12 strict: used-before-global = SyntaxError
         if _cluster_weights:
             _cluster_weights = {}
             log(
