@@ -1,0 +1,167 @@
+name: Signal Bot Saham IDX
+
+on:
+  schedule:
+    - cron: '50 1 * * 1-5'   # 08:50 WIB — Pre-market
+    - cron: '30 2 * * 1-5'   # 09:30 WIB — Opening momentum
+    - cron: '0 4 * * 1-5'    # 11:00 WIB — Mid-morning
+    - cron: '30 6 * * 1-5'   # 13:30 WIB — Post-lunch
+    - cron: '30 8 * * 1-5'   # 15:30 WIB — Closing approach
+    - cron: '0 13 * * 1-5'   # 20:00 WIB — Model evolution (job terpisah)
+
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Mode run'
+        required: false
+        default: 'normal'
+        type: choice
+        options:
+          - normal
+          - evolution
+          - collection-report
+          - backtest
+          - unit-test
+          - kill-switch-test
+          - strategy-perf
+          - validate
+
+# ─────────────────────────────────────────────────────────────
+#  JOB 1 — Main Signal Scan (5x sehari, jam bursa)
+# ─────────────────────────────────────────────────────────────
+jobs:
+  run-signal-bot:
+    name: Signal Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 6   # runtime estimasi ~95s, budget 6 menit aman
+
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode != 'evolution') ||
+      (github.event_name == 'schedule' && github.event.schedule != '0 13 * * 1-5')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Signal Bot
+        env:
+          # ── REQUIRED ───────────────────────────────────────────────
+          SUPABASE_URL:    ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:    ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_TOKEN:  ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:         ${{ secrets.CHAT_ID }}
+          PORTFOLIO_IDR:   ${{ secrets.PORTFOLIO_IDR }}
+          RISK_PCT:        ${{ secrets.RISK_PCT }}
+
+          # ── EXECUTION MODE ─────────────────────────────────────────
+          EXECUTION_MODE:  ${{ vars.EXECUTION_MODE }}
+
+          # ── PHASE FLAGS ─────────────────────────────────────────────
+          PHASE2_STABILIZE:   ${{ vars.PHASE2_STABILIZE }}
+          PHASE3_COLLECTION:  ${{ vars.PHASE3_COLLECTION }}
+          PHASE4_VALIDATE:    ${{ vars.PHASE4_VALIDATE }}
+
+          # ── TRADING BEHAVIOR — config flags, simpan di vars ─────────
+          LEAN_MODE:                      ${{ vars.LEAN_MODE }}
+          SIMPLE_MODE:                    ${{ vars.SIMPLE_MODE }}
+          INTRADAY_ENABLED:               ${{ vars.INTRADAY_ENABLED }}
+          MAX_TRADES_PER_DAY:             ${{ vars.MAX_TRADES_PER_DAY }}
+          MAX_DAILY_DRAWDOWN_PCT:         ${{ vars.MAX_DAILY_DRAWDOWN_PCT }}
+          MAX_TOTAL_CAPITAL_DEPLOYED_PCT: ${{ vars.MAX_TOTAL_CAPITAL_DEPLOYED_PCT }}
+          MAX_OPEN_POSITIONS:             ${{ vars.MAX_OPEN_POSITIONS }}
+          MAX_SECTOR_EXPOSURE_PCT:        ${{ vars.MAX_SECTOR_EXPOSURE_PCT }}
+
+          # ── BROKER — hanya perlu saat EXECUTION_MODE=live ───────────
+          BROKER:           ${{ secrets.BROKER }}
+          BROKER_USERNAME:  ${{ secrets.BROKER_USERNAME }}
+          BROKER_PASSWORD:  ${{ secrets.BROKER_PASSWORD }}
+          BROKER_PIN:       ${{ secrets.BROKER_PIN }}
+
+          # ── DATA SOURCE FALLBACK ────────────────────────────────────
+          TWELVE_DATA_API_KEY:   ${{ secrets.TWELVE_DATA_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          L2_API_KEY:            ${{ secrets.L2_API_KEY }}
+          L2_API_URL:            ${{ secrets.L2_API_URL }}
+
+          # ── ADVANCED / DEVELOPER ────────────────────────────────────
+          EDGE_GATE_BYPASS:   ${{ vars.EDGE_GATE_BYPASS }}
+          IMPACT_MODEL_SCALE: ${{ vars.IMPACT_MODEL_SCALE }}
+          DEBUG_TICKER:       ${{ vars.DEBUG_TICKER }}
+
+        run: |
+          echo "▶️  Signal Bot Saham IDX"
+          echo "⏰  WIB: $(TZ='Asia/Jakarta' date)"
+          echo "🔧  EXECUTION_MODE: ${EXECUTION_MODE:-dry_run}"
+          echo "📊  PHASE3_COLLECTION: ${PHASE3_COLLECTION:-true}"
+
+          MODE="${{ github.event.inputs.mode }}"
+          case "$MODE" in
+            backtest)          python bot_saham.py --backtest ;;
+            unit-test)         python bot_saham.py --unit-test ;;
+            kill-switch-test)  python bot_saham.py --kill-switch-test ;;
+            strategy-perf)     python bot_saham.py --strategy-perf ;;
+            validate)          python bot_saham.py --validate ;;
+            collection-report) python bot_saham.py --collection-report ;;
+            *)                 python bot_saham.py ;;
+          esac
+
+      - name: Run complete
+        if: always()
+        run: echo "✅ Selesai — cek Telegram."
+
+# ─────────────────────────────────────────────────────────────
+#  JOB 2 — Model Evolution (sekali sehari, 20:00 WIB)
+# ─────────────────────────────────────────────────────────────
+  run-model-evolution:
+    name: Model Evolution (20:00 WIB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 13 * * 1-5') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'evolution')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Model Evolution
+        env:
+          SUPABASE_URL:    ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:    ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_TOKEN:  ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:         ${{ secrets.CHAT_ID }}
+          PORTFOLIO_IDR:   ${{ secrets.PORTFOLIO_IDR }}
+          RISK_PCT:        ${{ secrets.RISK_PCT }}
+          PHASE2_STABILIZE:  ${{ vars.PHASE2_STABILIZE }}
+          PHASE3_COLLECTION: ${{ vars.PHASE3_COLLECTION }}
+        run: |
+          echo "🧬 Model Evolution Cycle"
+          echo "⏰  WIB: $(TZ='Asia/Jakarta' date)"
+          python bot_saham.py --evolution
+
+      - name: Evolution complete
+        if: always()
+        run: echo "✅ Evolution selesai — cek Telegram."
